@@ -1,0 +1,173 @@
+src/
+  index.ts
+  └─ Entry point del package.
+     - Esporta SelfServiceShipmentWidget e i tipi pubblici (props, adapter, domain).
+     - (Opzionale) esporta anche tokens/theme types.
+
+  widget/
+    SelfServiceShipmentWidget.tsx
+    └─ Componente principale integrabile.
+       - Orchestrazione del flusso (identify → summary → change → review/submit).
+       - Riceve props: adapter, mode (guest/auth), strings, theme, callback eventi.
+       - Renderizza layout “neutro” e monta sections/parts.
+
+    SelfServiceShipmentWidget.scss
+    └─ Stili del widget con prefix (es. .sssw-…).
+       - Non tocca body/html.
+       - Usa CSS variables/tokens per tema (colore, radius, spacing).
+
+    types.ts
+    └─ Tipi UI del widget.
+       - Props del widget (mode, strings, theme, slots, callbacks).
+       - Tipi eventi: onSuccess/onError/onTrack.
+
+    state.ts
+    └─ Stato e transizioni del flusso.
+       - State machine “leggera” (idle/identifying/loading/ready/review/submitting/success/error).
+       - Azioni e reducer (o Zustand-like store minimal), senza dipendere dall’app host.
+
+    viewModel.ts
+    └─ “Collante” tra domain+dto e UI.
+       - Deriva dati pronti da mostrare: label stato spedizione, testi banner, campi read-only.
+       - Costruisce anche “UI models” (pills disponibili, sezioni abilitate, motivi blocco).
+       - Qui vive la logica di presentazione, non le regole di business.
+
+    sections/
+      Identify.tsx
+      └─ Sezione identificazione (guest).
+         - Form: orderId + email.
+         - Chiama adapter.identify/eligibility.
+         - Gestisce caso “richiede proof PayPal” se previsto dal contratto:
+           es. mostra campo transactionId oppure avvia OTP se l’azienda lo implementa.
+         - Output: shipmentKey / sessionKey per caricare dati.
+
+      Summary.tsx
+      └─ Riepilogo spedizione read-only.
+         - Stato, tracking, indirizzo corrente, contatti correnti.
+         - Mostra “modifiche consentite fino a…” e warning basati su capabilities.
+
+      Change.tsx
+      └─ Sezione “Cosa vuoi cambiare?” + rendering forms.
+         - Mostra ChangePills.
+         - Per ogni scelta, renderizza il relativo form (EditAddressForm ecc.).
+         - Applica CapabilityGate per abilitare/disabilitare con motivazione.
+
+      ReviewSubmit.tsx
+      └─ Step finale.
+         - Mostra diff (DiffViewer) “prima/dopo”.
+         - Conferma utente + submit unico.
+         - Chiama adapter.submitChanges.
+         - Gestisce success/fail con messaggi e callback.
+
+    parts/
+      ChangePills.tsx
+      └─ UI di selezione cambi (pill/checkbox).
+         - Mostra solo opzioni consentite o mostra disabilitate con tooltip (se vuoi).
+         - Restituisce l’elenco delle change-actions attive.
+
+      CapabilityGate.tsx
+      └─ Wrapper logico UI.
+         - Input: capabilityKey + CapabilitySet.
+         - Output: render children se allowed, altrimenti banner/tooltip con reason.
+         - Standardizza messaggi tipo “non modificabile: già affidata al corriere”.
+
+      DiffViewer.tsx
+      └─ Visualizzazione differenze.
+         - Confronta “current vs proposed”.
+         - Evidenzia campi cambiati e warning (es. possibile ritardo/costo).
+         - NON decide regole, mostra solo diff + metadati.
+
+      forms/
+        EditAddressForm.tsx
+        └─ Form cambio indirizzo.
+           - Campi essenziali + validazioni.
+           - Normalizzazione (CAP, province, country) lato UI se utile.
+           - Produce un AddressChange (non fa submit).
+
+        EditContactForm.tsx
+        └─ Form cambio contatti (telefono/email/nome/citofono).
+           - Validazioni (telefono, email) e output ContactChange.
+
+        DeliveryNotesForm.tsx
+        └─ Form note corriere / consegna.
+           - Testo breve, regole max-len, output NotesChange.
+
+        PickupPointForm.tsx
+        └─ Scelta punto di ritiro (se supportato).
+           - Lista pick-up (da adapter) + selezione, output PickupPointChange.
+
+
+  contracts/
+    adapter.ts
+    └─ Interfaccia di integrazione (la cosa più importante).
+       - Metodi che l’azienda implementa leggendo le sue tabelle interne:
+         identify/eligibility, getShipment, getCapabilities (o inclusi), submitChanges.
+       - Supporta variante PayPal: check “paid via PayPal” e (se serve) proof step.
+
+    dtos.ts
+    └─ Tipi “wire” lato API.
+       - Request/response shape dell’host (anche se mock).
+       - Serve a non confondere DTO con domain.
+
+    domain.ts
+    └─ Modelli dominio indipendenti da UI e API.
+       - Shipment, Address, Contact, CapabilitySet, ChangeRequest, ecc.
+
+    mappers.ts
+    └─ Trasformazioni DTO → Domain e Domain → DTO.
+       - Qui l’azienda adatta il suo backend senza toccare widget UI.
+
+    rules.ts
+    └─ Regole puramente deterministiche di supporto (non business aziendale).
+       - Esempi: merge changeRequest, validazioni “soft” comuni, computeDiff “domain”.
+       - Non deve duplicare logiche backend: il backend decide, qui solo utilità.
+
+    errors.ts
+    └─ Error model normalizzato.
+       - Mappa errori adapter (HTTP/ERP) in codici stabili:
+         INVALID_INPUT, NOT_ELIGIBLE, PAYMENT_NOT_CONFIRMED, LOCKED_BY_CARRIER, ecc.
+       - Permette alla UI di mostrare messaggi coerenti.
+
+
+  ui/
+    Button.tsx
+    └─ Bottone base (fallback se l’host non fornisce design system).
+       - Variants (primary/secondary), disabled/loading.
+
+    Input.tsx
+    └─ Input base con label, helper, error, maxLength.
+
+    Select.tsx
+    └─ Select base (country, pickup points, ecc.).
+
+    Checkbox.tsx
+    └─ Checkbox base (consenso conferma, selettori).
+
+    Card.tsx
+    └─ Contenitore card per summary e sezioni.
+
+    Modal.tsx
+    └─ Modal (opzionale) per review/diff o messaggi.
+
+    Alert.tsx
+    └─ Banner/warning/error info (coerente in tutto il widget).
+
+    Spinner.tsx
+    └─ Loader semplice per stati loading/submitting.
+
+    ui.scss
+    └─ Stili UI base con prefix.
+       - Tutto tematizzabile via tokens/CSS variables.
+
+
+  styles/
+    _tokens.scss
+    └─ Design tokens (spacing, radius, font-size, colori default).
+       - Esposti come CSS variables (consigliato) o mixin SCSS.
+
+    _mixins.scss
+    └─ Mixin comuni (focus ring, truncate, responsive helpers).
+
+    global.scss (opzionale, meglio evitarlo)
+    └─ Da usare SOLO se vuoi offrire un “reset” interno al widget tramite wrapper.
+       - In generale eviterei: rischio collisioni con l’host.

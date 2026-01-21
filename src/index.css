@@ -1,0 +1,165 @@
+@font-face {
+  font-family: 'TestSohne';
+  src: url('../TestSohne-Extraleicht.otf') format('opentype');
+  font-weight: 200;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'TestSohne';
+  src: url('../TestSohne-Leicht.otf') format('opentype');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'TestSohne';
+  src: url('../TestSohne-Buch.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  font-family: 'TestSohne', 'Segoe UI', sans-serif;
+  color: #1f2937;
+  background-color: #ff0000;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: #ff0000;
+}
+
+.sssw-app {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+  background: transparent;
+}
+
+.sssw-entry {
+  width: min(980px, 94vw);
+}
+
+.sssw-entry-faq {
+  width: 100%;
+  border-top: 1px solid #e5e5e5;
+  border-bottom: 1px solid #e5e5e5;
+  background: #ffffff;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sssw-entry-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.sssw-entry-text {
+  flex: 1;
+}
+
+.sssw-entry-title {
+  margin: 0 0 6px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.sssw-entry-subtitle {
+  margin: 0;
+  font-size: 13px;
+  color: #5b5b5b;
+  line-height: 1.5;
+}
+
+.sssw-entry-toggle {
+  border: none;
+  background: transparent;
+  color: #1a1a1a;
+  width: auto;
+  height: auto;
+  padding: 4px;
+  border-radius: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: opacity 160ms ease;
+}
+
+.sssw-entry-toggle:hover {
+  opacity: 0.7;
+}
+
+.sssw-entry-toggle-icon {
+  width: 9px;
+  height: 9px;
+  border-right: 2px solid #1a1a1a;
+  border-bottom: 2px solid #1a1a1a;
+  transform: rotate(45deg);
+  transition: transform 160ms ease;
+}
+
+.sssw-entry-faq--open .sssw-entry-toggle-icon {
+  transform: rotate(-135deg);
+}
+
+.sssw-entry-panel {
+  width: 100%;
+  margin-top: 10px;
+}
+
+.sssw-entry-panel .sssw-card {
+  width: 100%;
+}
+
+.sssw-entry-panel--enter {
+  animation: sssw-entry-in 220ms ease;
+}
+
+.sssw-entry-panel--exit {
+  animation: sssw-entry-out 180ms ease forwards;
+}
+
+@keyframes sssw-entry-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes sssw-entry-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
+@media (max-width: 640px) {
+  .sssw-entry {
+    width: 100%;
+  }
+}
