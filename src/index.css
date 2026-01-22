@@ -1,6 +1,6 @@
 @font-face {
   font-family: 'TestSohne';
-  src: url('../TestSohne-Extraleicht.otf') format('opentype');
+  src: url('./assets/font/TestSohne-Extraleicht.otf') format('opentype');
   font-weight: 200;
   font-style: normal;
   font-display: swap;
@@ -8,7 +8,7 @@
 
 @font-face {
   font-family: 'TestSohne';
-  src: url('../TestSohne-Leicht.otf') format('opentype');
+  src: url('./assets/font/TestSohne-Leicht.otf') format('opentype');
   font-weight: 300;
   font-style: normal;
   font-display: swap;
@@ -16,7 +16,7 @@
 
 @font-face {
   font-family: 'TestSohne';
-  src: url('../TestSohne-Buch.otf') format('opentype');
+  src: url('./assets/font/TestSohne-Buch.otf') format('opentype');
   font-weight: 400;
   font-style: normal;
   font-display: swap;

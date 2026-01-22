@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import './SelfServiceShipmentWidget.scss';
 
-type ViewState = 'ACCESS' | 'LOADING' | 'DATA' | 'CONFIRM';
+type ViewState = 'ACCESS' | 'LOADING' | 'DATA';
 
 type Option = {
   name: string;
@@ -33,7 +33,15 @@ type OrderResponse = {
   invoices: Invoice[];
 };
 
-type EditableShippingAddress = {
+type DeliveryAddress = {
+  id: string;
+  street: string;
+  city: string;
+  zip: string;
+  country: string;
+};
+
+type NewDeliveryAddress = {
   street: string;
   city: string;
   zip: string;
@@ -41,7 +49,9 @@ type EditableShippingAddress = {
 };
 
 type EditableDetails = {
-  shippingAddress: EditableShippingAddress;
+  deliveryAddresses: DeliveryAddress[];
+  selectedDeliveryId: string;
+  newDeliveryAddress: NewDeliveryAddress;
   contactEmail: string;
   contactPhone: string;
 };
@@ -52,7 +62,7 @@ type EditableDiff = {
   after: string;
 };
 
-type EditSection = 'address' | 'general' | 'cancel' | null;
+type FlowType = 'shipping' | 'info' | 'cancel';
 
 type ApiMode = 'test' | 'mohd';
 type ConfirmStatus = 'idle' | 'loading' | 'success' | 'error';
@@ -64,7 +74,7 @@ const initialAccess = {
   email: ''
 };
 
-const initialSelection: EditSection = null;
+const initialFlow: FlowType | null = null;
 
 const TEST_ORDER_NUMBER = 'ECOMMSO180809';
 const TEST_ORDER_EMAIL = 'dariotoscano@gmail.com';
@@ -95,21 +105,48 @@ const mockResponse: OrderResponse = {
 };
 
 const createEditableDefaults = (email: string): EditableDetails => ({
-  shippingAddress: {
-    street: 'Via Roma 12',
-    city: 'Milano',
-    zip: '20121',
-    country: 'Italia'
+  deliveryAddresses: [
+    {
+      id: 'addr-1',
+      street: 'Via Roma 12',
+      city: 'Milano',
+      zip: '20121',
+      country: 'Italia'
+    },
+    {
+      id: 'addr-2',
+      street: 'Via Torino 8',
+      city: 'Milano',
+      zip: '20123',
+      country: 'Italia'
+    }
+  ],
+  selectedDeliveryId: 'addr-1',
+  newDeliveryAddress: {
+    street: '',
+    city: '',
+    zip: '',
+    country: ''
   },
   contactEmail: email,
   contactPhone: '+39 02 1234 5678'
 });
 
 const cloneEditable = (details: EditableDetails): EditableDetails => ({
-  shippingAddress: { ...details.shippingAddress },
+  deliveryAddresses: details.deliveryAddresses.map((address) => ({ ...address })),
+  selectedDeliveryId: details.selectedDeliveryId,
+  newDeliveryAddress: { ...details.newDeliveryAddress },
   contactEmail: details.contactEmail,
   contactPhone: details.contactPhone
 });
+
+const isAddressComplete = (address: NewDeliveryAddress) =>
+  [address.street, address.city, address.zip, address.country].every((value) => value.trim() !== '');
+
+const formatDeliveryAddress = (address?: { street: string; city: string; zip: string; country: string }) => {
+  if (!address) return '-';
+  return `${address.street}, ${address.city} ${address.zip}, ${address.country}`;
+};
 
 const computeEditableDiff = (before: EditableDetails, after: EditableDetails): EditableDiff[] => {
   const diff: EditableDiff[] = [];
@@ -119,10 +156,24 @@ const computeEditableDiff = (before: EditableDetails, after: EditableDetails): E
     }
   };
 
-  push('Indirizzo - Via', before.shippingAddress.street, after.shippingAddress.street);
-  push('Indirizzo - Citta', before.shippingAddress.city, after.shippingAddress.city);
-  push('Indirizzo - CAP', before.shippingAddress.zip, after.shippingAddress.zip);
-  push('Indirizzo - Paese', before.shippingAddress.country, after.shippingAddress.country);
+  const beforeSelected = before.deliveryAddresses.find(
+    (address) => address.id === before.selectedDeliveryId
+  );
+  const afterSelected = after.deliveryAddresses.find(
+    (address) => address.id === after.selectedDeliveryId
+  );
+  push(
+    'Indirizzo di consegna - selezione',
+    formatDeliveryAddress(beforeSelected),
+    formatDeliveryAddress(afterSelected)
+  );
+
+  if (isAddressComplete(after.newDeliveryAddress)) {
+    push('Nuovo indirizzo - Via', '', after.newDeliveryAddress.street);
+    push('Nuovo indirizzo - Citta', '', after.newDeliveryAddress.city);
+    push('Nuovo indirizzo - CAP', '', after.newDeliveryAddress.zip);
+    push('Nuovo indirizzo - Paese', '', after.newDeliveryAddress.country);
+  }
   push('Contatto - Email', before.contactEmail, after.contactEmail);
   push('Contatto - Telefono', before.contactPhone, after.contactPhone);
 
@@ -176,6 +227,109 @@ const buildApiUrl = (orderId: string, email: string, mode: ApiMode) => {
   return `https://myorder.mohd.it/api/search_intercom?order=${encodedOrderId}&email=${encodedEmail}`;
 };
 
+type StepHeaderProps = {
+  title: string;
+  helper?: string;
+  stepLabel: string;
+  onBack?: () => void;
+};
+
+const StepHeader = ({ title, helper, stepLabel, onBack }: StepHeaderProps) => (
+  <div className="sssw-step-header">
+    <div className="sssw-step-top">
+      {onBack ? (
+        <button type="button" className="sssw-link-button sssw-link-button--back" onClick={onBack}>
+          Indietro
+        </button>
+      ) : (
+        <span className="sssw-step-spacer" aria-hidden="true" />
+      )}
+      <span className="sssw-step-indicator">{stepLabel}</span>
+    </div>
+    <p className="sssw-step-title">{title}</p>
+    {helper && <p className="sssw-step-helper">{helper}</p>}
+  </div>
+);
+
+type ChoiceListItemProps = {
+  label: string;
+  description: string;
+  onClick: () => void;
+  disabled?: boolean;
+};
+
+const ChoiceListItem = ({ label, description, onClick, disabled }: ChoiceListItemProps) => (
+  <button type="button" className="sssw-choice-item" onClick={onClick} disabled={disabled}>
+    <div className="sssw-choice-text">
+      <span className="sssw-choice-label">{label}</span>
+      <span className="sssw-choice-description">{description}</span>
+    </div>
+    <span className="sssw-choice-icon" aria-hidden="true">
+      <svg viewBox="0 0 16 16">
+        <path d="M6 3.5 10.5 8 6 12.5" />
+      </svg>
+    </span>
+  </button>
+);
+
+type SelectableCardProps = {
+  selected: boolean;
+  onClick: () => void;
+  badge?: string;
+  children: ReactNode;
+};
+
+const SelectableCard = ({ selected, onClick, badge, children }: SelectableCardProps) => (
+  <button
+    type="button"
+    className={`sssw-select-card ${selected ? 'sssw-select-card--active' : ''}`}
+    onClick={onClick}
+  >
+    <div className="sssw-select-card-content">{children}</div>
+    <div className="sssw-select-card-right">
+      {badge && <span className="sssw-select-card-badge">{badge}</span>}
+      <span className={`sssw-select-card-check ${selected ? 'sssw-select-card-check--active' : ''}`}>
+        <svg viewBox="0 0 20 20">
+          <path d="M7.8 13.3 4.7 10.2l-1.4 1.4 4.5 4.5 8.1-8.1-1.4-1.4-6.7 6.7Z" />
+        </svg>
+      </span>
+    </div>
+  </button>
+);
+
+type CollapsibleFormCardProps = {
+  title: string;
+  isOpen: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+};
+
+const CollapsibleFormCard = ({ title, isOpen, onToggle, children }: CollapsibleFormCardProps) => (
+  <div className={`sssw-collapse-card ${isOpen ? 'sssw-collapse-card--open' : ''}`}>
+    <button type="button" className="sssw-collapse-trigger" onClick={onToggle}>
+      <span>{title}</span>
+      <span className={`sssw-collapse-icon ${isOpen ? 'sssw-collapse-icon--open' : ''}`}>
+        <svg viewBox="0 0 16 16">
+          <path d="M3.5 6 8 10.5 12.5 6" />
+        </svg>
+      </span>
+    </button>
+    {isOpen && <div className="sssw-collapse-body">{children}</div>}
+  </div>
+);
+
+type ReviewSummaryProps = {
+  title: string;
+  children: ReactNode;
+};
+
+const ReviewSummary = ({ title, children }: ReviewSummaryProps) => (
+  <div className="sssw-review">
+    <p className="sssw-review-title">{title}</p>
+    <div className="sssw-review-content">{children}</div>
+  </div>
+);
+
 export default function SelfServiceShipmentWidget() {
   const [view, setView] = useState<ViewState>('ACCESS');
   const [displayView, setDisplayView] = useState<ViewState>('ACCESS');
@@ -187,31 +341,24 @@ export default function SelfServiceShipmentWidget() {
   const [order, setOrder] = useState<OrderResponse | null>(null);
   const [editable, setEditable] = useState<EditableDetails | null>(null);
   const [editableBaseline, setEditableBaseline] = useState<EditableDetails | null>(null);
-  const [editSelection, setEditSelection] = useState<EditSection>(initialSelection);
-  const [diff, setDiff] = useState<EditableDiff[]>([]);
   const [isPaid, setIsPaid] = useState(false);
   const [cancelConfirmed, setCancelConfirmed] = useState(false);
-  const [lastAction, setLastAction] = useState<EditSection>(null);
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [flowType, setFlowType] = useState<FlowType | null>(initialFlow);
+  const [isNewAddressOpen, setIsNewAddressOpen] = useState(false);
+  const [useNewAddress, setUseNewAddress] = useState(false);
   const [confirmStatus, setConfirmStatus] = useState<ConfirmStatus>('idle');
   const [confirmOutcome, setConfirmOutcome] = useState<Exclude<ConfirmStatus, 'idle' | 'loading'>>(
     'success'
   );
-  const [showAllDiff, setShowAllDiff] = useState(false);
-  const { hasAddressChanges, hasGeneralChanges } = useMemo(() => {
+  const hasGeneralChanges = useMemo(() => {
     if (!editable || !editableBaseline) {
-      return { hasAddressChanges: false, hasGeneralChanges: false };
+      return false;
     }
-    const address = editable.shippingAddress;
-    const baseAddress = editableBaseline.shippingAddress;
-    const hasAddress =
-      address.street !== baseAddress.street ||
-      address.city !== baseAddress.city ||
-      address.zip !== baseAddress.zip ||
-      address.country !== baseAddress.country;
-    const hasGeneral =
+    return (
       editable.contactEmail !== editableBaseline.contactEmail ||
-      editable.contactPhone !== editableBaseline.contactPhone;
-    return { hasAddressChanges: hasAddress, hasGeneralChanges: hasGeneral };
+      editable.contactPhone !== editableBaseline.contactPhone
+    );
   }, [editable, editableBaseline]);
 
   useEffect(() => {
@@ -227,20 +374,12 @@ export default function SelfServiceShipmentWidget() {
   }, [view, displayView]);
 
   useEffect(() => {
-    if (view === 'CONFIRM') {
-      console.log('[CONFIRM] done');
-    }
-  }, [view]);
-
-  useEffect(() => {
-    if (view !== 'CONFIRM' || confirmStatus !== 'loading') {
-      return undefined;
-    }
+    if (confirmStatus !== 'loading') return undefined;
     const timer = window.setTimeout(() => {
       setConfirmStatus(confirmOutcome);
     }, 900);
     return () => window.clearTimeout(timer);
-  }, [view, confirmStatus, confirmOutcome]);
+  }, [confirmStatus, confirmOutcome]);
 
   const handleAccessSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -293,26 +432,25 @@ export default function SelfServiceShipmentWidget() {
       const defaults = createEditableDefaults(trimmedEmail);
       setEditable(defaults);
       setEditableBaseline(cloneEditable(defaults));
-      setEditSelection(initialSelection);
-      setDiff([]);
+      setStep(1);
+      setFlowType(initialFlow);
+      setIsNewAddressOpen(false);
+      setUseNewAddress(false);
       setIsPaid(paid);
       setCancelConfirmed(false);
-      setLastAction(null);
       setConfirmStatus('idle');
-      setShowAllDiff(false);
       setView('DATA');
     }, delay);
   };
 
-  const toggleEditSelection = (key: Exclude<EditSection, null>) => {
+  const selectFlow = (nextFlow: FlowType) => {
     if (!isPaid) return;
-    setEditSelection((prev) => {
-      const next = prev === key ? null : key;
-      if (next !== 'cancel') {
-        setCancelConfirmed(false);
-      }
-      return next;
-    });
+    setFlowType(nextFlow);
+    setStep(2);
+    setConfirmStatus('idle');
+    if (nextFlow !== 'cancel') {
+      setCancelConfirmed(false);
+    }
   };
 
   const updateEditable = (updater: (current: EditableDetails) => EditableDetails) => {
@@ -320,44 +458,63 @@ export default function SelfServiceShipmentWidget() {
   };
 
   const handleConfirmChanges = () => {
-    if (!editSelection) return;
+    if (!flowType) return;
     if (!editable || !editableBaseline) return;
     if (!isPaid) return;
-    if (editSelection === 'address' && !hasAddressChanges) return;
-    if (editSelection === 'general' && !hasGeneralChanges) return;
-    if (editSelection === 'cancel') {
+
+    if (flowType === 'cancel') {
       if (!cancelConfirmed) return;
       setConfirmOutcome('success');
       setConfirmStatus('loading');
-      setShowAllDiff(false);
       console.log('[DATA] mock cancel request', {
         orderId: access.orderId.trim(),
         email: access.email.trim(),
         isPaid
       });
-      setDiff([]);
-      setLastAction('cancel');
-      setView('CONFIRM');
       return;
     }
-    const nextDiff = computeEditableDiff(editableBaseline, editable);
+
+    const shouldCreateAddress = flowType === 'shipping' && useNewAddress && isAddressComplete(editable.newDeliveryAddress);
+    const newAddressId = shouldCreateAddress ? `addr-${Date.now()}` : null;
+    const nextEditable = shouldCreateAddress
+      ? {
+          ...editable,
+          deliveryAddresses: [
+            ...editable.deliveryAddresses,
+            {
+              id: newAddressId ?? '',
+              ...editable.newDeliveryAddress
+            }
+          ],
+          selectedDeliveryId: newAddressId ?? editable.selectedDeliveryId
+        }
+      : editable;
+    const nextDiff = computeEditableDiff(editableBaseline, nextEditable);
     setConfirmOutcome('success');
     setConfirmStatus('loading');
-    setShowAllDiff(false);
     console.log('[DATA] mock submit changes', {
       before: editableBaseline,
-      after: editable,
+      after: nextEditable,
       diff: nextDiff,
       orderId: access.orderId.trim(),
       email: access.email.trim(),
       isPaid,
-      action: editSelection
+      action: flowType
     });
 
-    setDiff(nextDiff);
-    setEditableBaseline(cloneEditable(editable));
-    setLastAction(editSelection);
-    setView('CONFIRM');
+    const resetEditable = shouldCreateAddress
+      ? {
+          ...nextEditable,
+          newDeliveryAddress: {
+            street: '',
+            city: '',
+            zip: '',
+            country: ''
+          }
+        }
+      : nextEditable;
+    setEditable(resetEditable);
+    setEditableBaseline(cloneEditable(resetEditable));
   };
 
   const resetAll = () => {
@@ -366,13 +523,13 @@ export default function SelfServiceShipmentWidget() {
     setOrder(null);
     setEditable(null);
     setEditableBaseline(null);
-    setEditSelection(initialSelection);
-    setDiff([]);
     setIsPaid(false);
     setCancelConfirmed(false);
-    setLastAction(null);
+    setStep(1);
+    setFlowType(initialFlow);
+    setIsNewAddressOpen(false);
+    setUseNewAddress(false);
     setConfirmStatus('idle');
-    setShowAllDiff(false);
     setView('ACCESS');
   };
 
@@ -451,10 +608,22 @@ export default function SelfServiceShipmentWidget() {
 
   const renderData = () => {
     if (!order || !editable) return null;
+    const hasSelectionChange =
+      !!editableBaseline && editable.selectedDeliveryId !== editableBaseline.selectedDeliveryId;
     const showConfirmButton =
-      (editSelection === 'cancel' && cancelConfirmed) ||
-      (editSelection === 'address' && hasAddressChanges) ||
-      (editSelection === 'general' && hasGeneralChanges);
+      (flowType === 'cancel' && cancelConfirmed) ||
+      (flowType === 'shipping' && (useNewAddress ? isAddressComplete(editable.newDeliveryAddress) : hasSelectionChange)) ||
+      (flowType === 'info' && hasGeneralChanges);
+    const selectedDelivery =
+      editable.deliveryAddresses.find((address) => address.id === editable.selectedDeliveryId) ??
+      editable.deliveryAddresses[0];
+    const hasNewAddress = isAddressComplete(editable.newDeliveryAddress);
+    const canContinueShipping = useNewAddress ? hasNewAddress : Boolean(hasSelectionChange);
+    const canContinueInfo = hasGeneralChanges;
+    const canContinueCancel = cancelConfirmed;
+    const reviewAddress = useNewAddress && hasNewAddress ? editable.newDeliveryAddress : selectedDelivery;
+    const isConfirming = confirmStatus === 'loading';
+    const isConfirmed = confirmStatus === 'success';
 
     return (
       <div className="sssw-data">
@@ -481,9 +650,9 @@ export default function SelfServiceShipmentWidget() {
                   <span className="sssw-summary-value">{editable.contactPhone || '-'}</span>
                 </div>
                 <div className="sssw-summary-row">
-                  <span className="sssw-summary-label">Indirizzo spedizione</span>
+                  <span className="sssw-summary-label">Indirizzo di consegna</span>
                   <span className="sssw-summary-value">
-                    {`${editable.shippingAddress.street}, ${editable.shippingAddress.city} ${editable.shippingAddress.zip}, ${editable.shippingAddress.country}`}
+                    {formatDeliveryAddress(selectedDelivery)}
                   </span>
                 </div>
               </div>
@@ -570,115 +739,187 @@ export default function SelfServiceShipmentWidget() {
           </div>
 
           <div className="sssw-data-right">
-            <div className="sssw-edit">
-              <div className="sssw-edit-header">
-                <p className="sssw-section-title">Cosa desideri modificare?</p>
-                <p className="sssw-edit-hint">
-                  Seleziona l'operazione che desideri effettuare sul tuo ordine.
-                </p>
-                {!isPaid && (
-                  <div className="sssw-alert">
-                    Le modifiche sono disponibili solo per ordini con fattura pagata.
-                  </div>
-                )}
-              </div>
-
-              <div className={`sssw-edit-body ${!isPaid ? 'sssw-edit-body--disabled' : ''}`}>
-                <div className="sssw-pill-group">
-                  {/* Primary actions: keep on a single line, same width */}
-                  <button
-                    type="button"
-                    className={`sssw-pill ${editSelection === 'address' ? 'sssw-pill--active' : ''}`}
-                    onClick={() => toggleEditSelection('address')}
-                    disabled={!isPaid}
-                  >
-                    Cambia indirizzo
-                  </button>
-                  <button
-                    type="button"
-                    className={`sssw-pill ${editSelection === 'general' ? 'sssw-pill--active' : ''}`}
-                    onClick={() => toggleEditSelection('general')}
-                    disabled={!isPaid}
-                  >
-                    Modifica informazioni
-                  </button>
-                  <button
-                    type="button"
-                    className={`sssw-pill sssw-pill--danger ${editSelection === 'cancel' ? 'sssw-pill--active' : ''}`}
-                    onClick={() => toggleEditSelection('cancel')}
-                    disabled={!isPaid}
-                  >
-                    Cancella ordine
-                  </button>
-                </div>
-
-                {editSelection === 'address' && (
-                  <div className="sssw-fieldset">
-                    <p className="sssw-fieldset-title">Aggiorna indirizzo</p>
-                    <label className="sssw-field">
-                      <span>Via</span>
-                      <input
-                        type="text"
-                        value={editable.shippingAddress.street}
-                        onChange={(event) =>
-                          updateEditable((current) => ({
-                            ...current,
-                            shippingAddress: { ...current.shippingAddress, street: event.target.value }
-                          }))
-                        }
-                        disabled={!isPaid}
-                      />
-                    </label>
-                    <label className="sssw-field">
-                      <span>Citta</span>
-                      <input
-                        type="text"
-                        value={editable.shippingAddress.city}
-                        onChange={(event) =>
-                          updateEditable((current) => ({
-                            ...current,
-                            shippingAddress: { ...current.shippingAddress, city: event.target.value }
-                          }))
-                        }
-                        disabled={!isPaid}
-                      />
-                    </label>
-                    <div className="sssw-field-grid">
-                      <label className="sssw-field">
-                        <span>CAP</span>
-                        <input
-                          type="text"
-                          value={editable.shippingAddress.zip}
-                          onChange={(event) =>
-                            updateEditable((current) => ({
-                              ...current,
-                              shippingAddress: { ...current.shippingAddress, zip: event.target.value }
-                            }))
-                          }
-                          disabled={!isPaid}
-                        />
-                      </label>
-                      <label className="sssw-field">
-                        <span>Paese</span>
-                        <input
-                          type="text"
-                          value={editable.shippingAddress.country}
-                          onChange={(event) =>
-                            updateEditable((current) => ({
-                              ...current,
-                              shippingAddress: { ...current.shippingAddress, country: event.target.value }
-                            }))
-                          }
-                          disabled={!isPaid}
-                        />
-                      </label>
+            <div className="sssw-edit sssw-wizard">
+              {step === 1 && (
+                <div className="sssw-wizard-body">
+                  <StepHeader
+                    title="Cosa desideri modificare?"
+                    helper="Seleziona l'operazione che desideri effettuare sul tuo ordine."
+                    stepLabel="1 di 3"
+                  />
+                  {!isPaid && (
+                    <div className="sssw-alert">
+                      Le modifiche sono disponibili solo per ordini con fattura pagata.
                     </div>
+                  )}
+                  <div className={`sssw-choice-list ${!isPaid ? 'sssw-edit-body--disabled' : ''}`}>
+                    <ChoiceListItem
+                      label="Indirizzo di consegna"
+                      description="Scegli un indirizzo salvato o aggiungine uno nuovo."
+                      onClick={() => selectFlow('shipping')}
+                      disabled={!isPaid}
+                    />
+                    <ChoiceListItem
+                      label="Modifica informazioni"
+                      description="Aggiorna email e telefono di contatto."
+                      onClick={() => selectFlow('info')}
+                      disabled={!isPaid}
+                    />
+                    <ChoiceListItem
+                      label="Cancella ordine"
+                      description="Invia una richiesta di annullamento ordine."
+                      onClick={() => selectFlow('cancel')}
+                      disabled={!isPaid}
+                    />
                   </div>
-                )}
+                </div>
+              )}
 
-                {editSelection === 'general' && (
+              {step === 2 && flowType === 'shipping' && (
+                <div className="sssw-wizard-body">
+                  <StepHeader
+                    title="Indirizzo di consegna"
+                    helper="Scegli un indirizzo salvato oppure aggiungine uno nuovo."
+                    stepLabel="2 di 3"
+                    onBack={() => setStep(1)}
+                  />
+                  <div className="sssw-select-list">
+                    {editable.deliveryAddresses.map((address) => (
+                      <SelectableCard
+                        key={address.id}
+                        selected={!useNewAddress && editable.selectedDeliveryId === address.id}
+                        badge={editable.selectedDeliveryId === address.id ? 'Attuale' : undefined}
+                        onClick={() => {
+                          setUseNewAddress(false);
+                          updateEditable((current) => ({
+                            ...current,
+                            selectedDeliveryId: address.id
+                          }));
+                        }}
+                      >
+                        <div className="sssw-select-card-lines">
+                          <span>{address.street}</span>
+                          <span>{`${address.city} ${address.zip}`}</span>
+                          <span>{address.country}</span>
+                        </div>
+                      </SelectableCard>
+                    ))}
+                  </div>
+
+                  <CollapsibleFormCard
+                    title="+ Aggiungi nuovo indirizzo"
+                    isOpen={isNewAddressOpen}
+                    onToggle={() => setIsNewAddressOpen((prev) => !prev)}
+                  >
+                    <div className="sssw-new-address">
+                      <label className="sssw-field">
+                        <span>
+                          Via <span className="sssw-required">*</span>
+                        </span>
+                        <input
+                          type="text"
+                          value={editable.newDeliveryAddress.street}
+                          onChange={(event) =>
+                            updateEditable((current) => ({
+                              ...current,
+                              newDeliveryAddress: {
+                                ...current.newDeliveryAddress,
+                                street: event.target.value
+                              }
+                            }))
+                          }
+                          onInput={() => setUseNewAddress(true)}
+                          disabled={!isPaid}
+                        />
+                        {useNewAddress && !editable.newDeliveryAddress.street.trim() && (
+                          <span className="sssw-error">Campo obbligatorio.</span>
+                        )}
+                      </label>
+                      <label className="sssw-field">
+                        <span>
+                          Citta <span className="sssw-required">*</span>
+                        </span>
+                        <input
+                          type="text"
+                          value={editable.newDeliveryAddress.city}
+                          onChange={(event) =>
+                            updateEditable((current) => ({
+                              ...current,
+                              newDeliveryAddress: {
+                                ...current.newDeliveryAddress,
+                                city: event.target.value
+                              }
+                            }))
+                          }
+                          onInput={() => setUseNewAddress(true)}
+                          disabled={!isPaid}
+                        />
+                        {useNewAddress && !editable.newDeliveryAddress.city.trim() && (
+                          <span className="sssw-error">Campo obbligatorio.</span>
+                        )}
+                      </label>
+                      <div className="sssw-field-grid">
+                        <label className="sssw-field">
+                          <span>
+                            CAP <span className="sssw-required">*</span>
+                          </span>
+                          <input
+                            type="text"
+                            value={editable.newDeliveryAddress.zip}
+                            onChange={(event) =>
+                              updateEditable((current) => ({
+                                ...current,
+                                newDeliveryAddress: {
+                                  ...current.newDeliveryAddress,
+                                  zip: event.target.value
+                                }
+                              }))
+                            }
+                            onInput={() => setUseNewAddress(true)}
+                            disabled={!isPaid}
+                          />
+                          {useNewAddress && !editable.newDeliveryAddress.zip.trim() && (
+                            <span className="sssw-error">Campo obbligatorio.</span>
+                          )}
+                        </label>
+                        <label className="sssw-field">
+                          <span>
+                            Paese <span className="sssw-required">*</span>
+                          </span>
+                          <input
+                            type="text"
+                            value={editable.newDeliveryAddress.country}
+                            onChange={(event) =>
+                              updateEditable((current) => ({
+                                ...current,
+                                newDeliveryAddress: {
+                                  ...current.newDeliveryAddress,
+                                  country: event.target.value
+                                }
+                              }))
+                            }
+                            onInput={() => setUseNewAddress(true)}
+                            disabled={!isPaid}
+                          />
+                          {useNewAddress && !editable.newDeliveryAddress.country.trim() && (
+                            <span className="sssw-error">Campo obbligatorio.</span>
+                          )}
+                        </label>
+                      </div>
+                    </div>
+                  </CollapsibleFormCard>
+                </div>
+              )}
+
+              {step === 2 && flowType === 'info' && (
+                <div className="sssw-wizard-body">
+                  <StepHeader
+                    title="Modifica informazioni"
+                    helper="Aggiorna i riferimenti di contatto associati all'ordine."
+                    stepLabel="2 di 3"
+                    onBack={() => setStep(1)}
+                  />
                   <div className="sssw-fieldset">
-                    <p className="sssw-fieldset-title">Aggiorna informazioni generali</p>
                     <label className="sssw-field">
                       <span>Email</span>
                       <input
@@ -708,14 +949,18 @@ export default function SelfServiceShipmentWidget() {
                       />
                     </label>
                   </div>
-                )}
+                </div>
+              )}
 
-                {editSelection === 'cancel' && (
+              {step === 2 && flowType === 'cancel' && (
+                <div className="sssw-wizard-body">
+                  <StepHeader
+                    title="Cancella ordine"
+                    helper="La richiesta annulla l'ordine e invia una conferma via email."
+                    stepLabel="2 di 3"
+                    onBack={() => setStep(1)}
+                  />
                   <div className="sssw-cancel">
-                    <p className="sssw-cancel-title">Conferma richiesta cancellazione</p>
-                    <p className="sssw-cancel-text">
-                      La richiesta annulla l'ordine e invia una conferma via email.
-                    </p>
                     <label className="sssw-cancel-check">
                       <input
                         type="checkbox"
@@ -726,98 +971,148 @@ export default function SelfServiceShipmentWidget() {
                       <span>Confermo di voler cancellare l'ordine.</span>
                     </label>
                   </div>
-                )}
+                </div>
+              )}
 
-                {/* Submit button appears only after real changes are present */}
-                {showConfirmButton && (
-                  <button
-                    type="button"
-                    className="sssw-button sssw-button--primary"
-                    onClick={handleConfirmChanges}
-                    disabled={!isPaid}
-                  >
-                    {editSelection === 'cancel' ? 'Invia richiesta cancellazione' : 'Conferma modifiche'}
-                  </button>
-                )}
-              </div>
+              {step === 3 && flowType && (
+                <div className="sssw-wizard-body">
+                  <StepHeader
+                    title="Rivedi e conferma"
+                    helper="Controlla i dettagli prima di inviare la richiesta."
+                    stepLabel="3 di 3"
+                    onBack={confirmStatus === 'idle' ? () => setStep(2) : undefined}
+                  />
+
+                  {confirmStatus === 'idle' && flowType === 'shipping' && (
+                    <ReviewSummary title="Nuovo indirizzo di consegna">
+                      {reviewAddress ? (
+                        <div className="sssw-review-card">
+                          <span>{reviewAddress.street}</span>
+                          <span>{`${reviewAddress.city} ${reviewAddress.zip}`}</span>
+                          <span>{reviewAddress.country}</span>
+                        </div>
+                      ) : (
+                        <p className="sssw-empty">Nessun indirizzo selezionato.</p>
+                      )}
+                    </ReviewSummary>
+                  )}
+
+                  {confirmStatus === 'idle' && flowType === 'info' && (
+                    <ReviewSummary title="Informazioni di contatto">
+                      <div className="sssw-review-card">
+                        <span>{editable.contactEmail || '-'}</span>
+                        <span>{editable.contactPhone || '-'}</span>
+                      </div>
+                    </ReviewSummary>
+                  )}
+
+                  {confirmStatus === 'idle' && flowType === 'cancel' && (
+                    <ReviewSummary title="Richiesta cancellazione">
+                      <div className="sssw-review-card">
+                        <span>La cancellazione verra' inviata all'assistenza.</span>
+                      </div>
+                    </ReviewSummary>
+                  )}
+
+                  {confirmStatus !== 'idle' && (
+                    <div className="sssw-confirm-state">
+                      {isConfirming ? (
+                        <div className="sssw-confirm-loading">
+                          <div className="sssw-spinner" aria-hidden="true" />
+                          <p>Stiamo aggiornando i dati...</p>
+                        </div>
+                      ) : (
+                        <div className="sssw-confirm-success">
+                          <span className="sssw-confirm-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24">
+                              <path d="M12 22a10 10 0 1 1 0-20 10 10 0 0 1 0 20Zm4.3-12.7a1 1 0 0 0-1.4-1.4l-4.1 4.1-1.7-1.7a1 1 0 0 0-1.4 1.4l2.4 2.4a1 1 0 0 0 1.4 0l4.8-4.8Z" />
+                            </svg>
+                          </span>
+                          <p className="sssw-confirm-title">Modifica salvata</p>
+                          <p className="sssw-confirm-text">Abbiamo registrato la tua richiesta.</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {(step === 2 || step === 3) && (
+                <div className="sssw-wizard-footer">
+                  {step === 2 && flowType === 'shipping' && (
+                    <button
+                      type="button"
+                      className="sssw-button sssw-button--primary"
+                      onClick={() => setStep(3)}
+                      disabled={!canContinueShipping || !isPaid}
+                    >
+                      Continua
+                    </button>
+                  )}
+                  {step === 2 && flowType === 'info' && (
+                    <button
+                      type="button"
+                      className="sssw-button sssw-button--primary"
+                      onClick={() => setStep(3)}
+                      disabled={!canContinueInfo || !isPaid}
+                    >
+                      Continua
+                    </button>
+                  )}
+                  {step === 2 && flowType === 'cancel' && (
+                    <button
+                      type="button"
+                      className="sssw-button sssw-button--primary"
+                      onClick={() => setStep(3)}
+                      disabled={!canContinueCancel || !isPaid}
+                    >
+                      Continua
+                    </button>
+                  )}
+                  {step === 3 && flowType && confirmStatus === 'idle' && (
+                    <button
+                      type="button"
+                      className="sssw-button sssw-button--primary"
+                      onClick={handleConfirmChanges}
+                      disabled={!showConfirmButton || !isPaid}
+                    >
+                      Conferma
+                    </button>
+                  )}
+                  {step === 3 && flowType && confirmStatus !== 'idle' && (
+                    <button
+                      type="button"
+                      className="sssw-button sssw-button--primary"
+                      onClick={() => {
+                        setConfirmStatus('idle');
+                        setStep(1);
+                        setFlowType(initialFlow);
+                        setCancelConfirmed(false);
+                        setUseNewAddress(false);
+                        setIsNewAddressOpen(false);
+                      }}
+                    >
+                      Chiudi
+                    </button>
+                  )}
+                  {confirmStatus === 'idle' && (
+                    <button
+                      type="button"
+                      className="sssw-link-button sssw-link-button--secondary"
+                      onClick={() => {
+                        setConfirmStatus('idle');
+                        setStep(1);
+                        setFlowType(initialFlow);
+                        setCancelConfirmed(false);
+                      }}
+                    >
+                      Annulla
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
-        </div>
-      </div>
-    );
-  };
-
-  const renderConfirm = () => {
-    const isCancel = lastAction === 'cancel';
-    const isLoading = confirmStatus === 'loading';
-    const isError = confirmStatus === 'error';
-    const hasDiff = !isCancel && diff.length > 0;
-    const visibleDiff = showAllDiff ? diff : diff.slice(0, 3);
-    const hasMoreDiff = diff.length > 3;
-    return (
-      <div className="sssw-confirm">
-        {/* Confirmation hero: clean and centered for a premium feel. */}
-        <div className="sssw-confirm-hero">
-          {isLoading ? (
-            <div className="sssw-spinner sssw-spinner--large" aria-hidden="true" />
-          ) : (
-            <span
-              className={`sssw-confirm-icon ${isError ? 'sssw-confirm-icon--error' : 'sssw-confirm-icon--success'}`}
-              aria-hidden="true"
-            >
-              <svg viewBox="0 0 24 24" role="presentation">
-                <path d="M12 22a10 10 0 1 1 0-20 10 10 0 0 1 0 20Zm4.3-12.7a1 1 0 0 0-1.4-1.4l-4.1 4.1-1.7-1.7a1 1 0 0 0-1.4 1.4l2.4 2.4a1 1 0 0 0 1.4 0l4.8-4.8Z" />
-              </svg>
-            </span>
-          )}
-          <p className="sssw-confirm-hero-title">
-            {isLoading ? 'Stiamo aggiornando i dati' : 'Operazione completata'}
-          </p>
-          <p className="sssw-confirm-hero-text">
-            {isLoading ? 'Attendi qualche secondo.' : 'Successo'}
-          </p>
-        </div>
-
-        <h2 className="sssw-title">Modifiche inviate</h2>
-        <p className="sssw-subtitle">Abbiamo registrato la tua richiesta.</p>
-
-        {hasDiff && (
-          <>
-            <ul className="sssw-diff-list">
-              {visibleDiff.map((item) => (
-                <li key={item.field} className="sssw-diff-item">
-                  <p className="sssw-diff-field">{item.field}</p>
-                  <div className="sssw-diff-row">
-                    <span className="sssw-diff-label">Prima</span>
-                    <span className="sssw-diff-value">{item.before || '-'}</span>
-                  </div>
-                  <div className="sssw-diff-row">
-                    <span className="sssw-diff-label">Dopo</span>
-                    <span className="sssw-diff-value">{item.after || '-'}</span>
-                  </div>
-                </li>
-              ))}
-            </ul>
-            {hasMoreDiff && (
-              <button
-                type="button"
-                className="sssw-link-button"
-                onClick={() => setShowAllDiff((prev) => !prev)}
-              >
-                {showAllDiff ? 'Nascondi dettagli' : 'Mostra dettagli'}
-              </button>
-            )}
-          </>
-        )}
-
-        <div className="sssw-button-row">
-          {/* Primary/secondary CTAs are intentionally fixed for consistency. */}
-          <button type="button" className="sssw-button sssw-button--primary" onClick={() => setView('DATA')}>
-            Torna ai dati
-          </button>
-          <button type="button" className="sssw-button sssw-button--ghost" onClick={resetAll}>
-            Nuova ricerca
-          </button>
         </div>
       </div>
     );
@@ -831,8 +1126,6 @@ export default function SelfServiceShipmentWidget() {
         return renderLoading();
       case 'DATA':
         return renderData();
-      case 'CONFIRM':
-        return renderConfirm();
       default:
         return null;
     }
