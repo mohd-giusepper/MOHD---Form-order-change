@@ -58,6 +58,7 @@ export default function useShipmentAddresses({
   const loadAddresses = useCallback(async () => {
     if (!customerId) return;
     // Thin client: only loading/error states; BE is source-of-truth.
+    // Odoo sync is intentionally opaque here; FE consumes BE output as-is.
     setLoading(true);
     setError(null);
     setSyncStatus(null);
@@ -119,6 +120,7 @@ export default function useShipmentAddresses({
   const setDelivery = useCallback(
     async (orderId: string, addressId: string, deliveryInstructions?: string) => {
       // BE may return async sync status; UI stays non-blocking.
+      // Odoo async sync can surface via status/jobId without changing FE flow.
       const response = await api.setOrderDeliveryAddress(orderId, addressId, deliveryInstructions);
       setSyncStatus(response.status);
       setSyncErrorMessage(response.lastSyncError ?? null);

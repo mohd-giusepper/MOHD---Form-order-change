@@ -59,19 +59,23 @@ export type SyncResponse = {
 export type AddressApi = {
   /**
    * List addresses for a customer. FE does not deduplicate or normalize beyond basic shape.
+   * Odoo: BE should return the canonical address state (post-sync if applicable).
    */
   listAddresses: (customerId: string) => Promise<Address[]>;
   /**
    * Create an address only; does NOT set delivery on the order.
    * BE handles validation/dedup and Odoo sync side-effects.
+   * Odoo: may create asynchronously; FE expects the address id immediately.
    */
   createAddress: (customerId: string, payload: AddressInput) => Promise<Address>;
   /**
    * Update an existing address; does NOT set delivery on the order.
+   * Odoo: may update asynchronously; FE treats response as latest known state.
    */
   updateAddress: (addressId: string, payload: AddressInput) => Promise<Address>;
   /**
    * Set delivery address for an order; may return async sync status (Odoo).
+   * Odoo: BE is responsible for order/address association rules.
    */
   setOrderDeliveryAddress: (
     orderId: string,

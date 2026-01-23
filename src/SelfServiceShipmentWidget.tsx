@@ -76,7 +76,7 @@ type SelfServiceShipmentWidgetProps = {
   onProgressChange?: (value: number) => void;
 };
 
-// Wizard orchestrator only: address/domain logic lives in hooks/adapters for BE drop-in.
+// Wizard orchestrator only: address/domain logic lives in hooks/adapters for BE/Odoo drop-in.
 export default function SelfServiceShipmentWidget({ onProgressChange }: SelfServiceShipmentWidgetProps) {
   const [view, setView] = useState<ViewState>('ACCESS');
   const [displayView, setDisplayView] = useState<ViewState>('ACCESS');
