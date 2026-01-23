@@ -87,6 +87,48 @@ body {
   line-height: 1.5;
 }
 
+.sssw-entry-helper {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: #5b5b5b;
+  line-height: 1.5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.sssw-entry-link {
+  font-size: 12px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid #2b2b2b;
+  background: #2b2b2b;
+  color: #ffffff;
+  font-weight: 500;
+  transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.sssw-entry-link:hover {
+  background: #2b2b2b;
+  border-color: #2b2b2b;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.18);
+  transform: translateY(-1px);
+  color: #ffffff;
+}
+
+.sssw-link-button {
+  border: none;
+  background: transparent;
+  color: #1a1a1a;
+  padding: 0;
+  cursor: pointer;
+}
+
+.sssw-link-button.sssw-entry-link {
+  padding: 7px 14px;
+}
+
 .sssw-entry-toggle {
   border: none;
   background: transparent;
@@ -134,6 +176,86 @@ body {
 
 .sssw-entry-panel--exit {
   animation: sssw-entry-out 180ms ease forwards;
+}
+
+.sssw-modal-portal {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sssw-modal-scrim {
+  position: absolute;
+  inset: 0;
+  border: none;
+  background: rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+  z-index: 0;
+}
+
+.sssw-modal {
+  position: relative;
+  width: min(980px, 94vw);
+  max-height: 92vh;
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.24);
+  animation: sssw-modal-in 200ms ease;
+  overflow-y: auto;
+  z-index: 1;
+}
+
+.sssw-modal-progress {
+  margin-bottom: 4px;
+  padding: 16px 20px 0;
+}
+
+.sssw-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 20px;
+}
+
+.sssw-modal .sssw-card {
+  width: 100%;
+  padding: 20px;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.sssw-modal-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.sssw-modal-close {
+  border: none;
+  background: transparent;
+  font-size: 12px;
+  color: #1a1a1a;
+  cursor: pointer;
+}
+
+@keyframes sssw-modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes sssw-entry-in {

@@ -1,28 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import SelfServiceShipmentWidget from './SelfServiceShipmentWidget';
 
 export default function App() {
   const [isOpen, setIsOpen] = useState(false);
-  const [showWidget, setShowWidget] = useState(false);
-  const [isExiting, setIsExiting] = useState(false);
-
-  useEffect(() => {
-    if (isOpen) {
-      setShowWidget(true);
-      setIsExiting(false);
-      return;
-    }
-
-    if (showWidget) {
-      setIsExiting(true);
-      const timer = window.setTimeout(() => {
-        setShowWidget(false);
-        setIsExiting(false);
-      }, 180);
-      return () => window.clearTimeout(timer);
-    }
-    return undefined;
-  }, [isOpen, showWidget]);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [progressValue, setProgressValue] = useState(0);
 
   return (
     <div className="sssw-app">
@@ -34,6 +16,21 @@ export default function App() {
               <p className="sssw-entry-subtitle">
                 In base allo stato dell'ordine, alcune modifiche possono essere gestite direttamente online.
               </p>
+              {isOpen && (
+                <p className="sssw-entry-helper">
+                  Puoi aggiornare alcuni dati in autonomia senza contattare il supporto.{' '}
+                  <button
+                    type="button"
+                    className="sssw-entry-link"
+                    onClick={() => {
+                      setProgressValue(0);
+                      setIsModalOpen(true);
+                    }}
+                  >
+                    Apri la modalita' guidata
+                  </button>
+                </p>
+              )}
             </div>
             <button
               type="button"
@@ -45,13 +42,40 @@ export default function App() {
               <span className="sssw-entry-toggle-icon" aria-hidden="true" />
             </button>
           </div>
-          {showWidget && (
-            <div className={`sssw-entry-panel ${isExiting ? 'sssw-entry-panel--exit' : 'sssw-entry-panel--enter'}`}>
-              <SelfServiceShipmentWidget />
-            </div>
-          )}
         </div>
       </div>
+      {isModalOpen && (
+        <div
+          className="sssw-modal-portal"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setIsModalOpen(false)}
+        >
+          <button type="button" className="sssw-modal-scrim" aria-label="Chiudi" />
+          <div className="sssw-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="sssw-modal-progress">
+              <div
+                className="sssw-progress"
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={Math.round(progressValue * 100)}
+              >
+                <span className="sssw-progress-track">
+                  <span className="sssw-progress-fill" style={{ width: `${progressValue * 100}%` }} />
+                </span>
+              </div>
+            </div>
+            <div className="sssw-modal-header">
+              <p className="sssw-modal-title">Gestione ordine</p>
+              <button type="button" className="sssw-modal-close" onClick={() => setIsModalOpen(false)}>
+                Chiudi
+              </button>
+            </div>
+            <SelfServiceShipmentWidget onProgressChange={setProgressValue} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
