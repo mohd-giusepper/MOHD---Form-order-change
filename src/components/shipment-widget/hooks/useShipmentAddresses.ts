@@ -22,7 +22,7 @@ type UseShipmentAddressesResult = {
   setDelivery: (orderId: string, addressId: string, deliveryInstructions?: string) => Promise<SyncResponse>;
 };
 
-const defaultError = { code: 'UNKNOWN', message: 'Si e' verificato un errore.' };
+const defaultError: ApiError = { code: 'UNKNOWN', message: "Si e' verificato un errore." };
 const errorMessages: Record<string, string> = {
   INVALID_ZIP: 'CAP non valido.',
   INVALID_PHONE: 'Numero di telefono non valido.',
@@ -32,7 +32,7 @@ const errorMessages: Record<string, string> = {
   ORDER_LOCKED: "L'ordine non puo' essere modificato.",
   FORBIDDEN: 'Operazione non consentita.',
   NOT_IMPLEMENTED: 'Servizio non disponibile.',
-  UNKNOWN: 'Si e' verificato un errore.'
+  UNKNOWN: "Si e' verificato un errore."
 };
 
 const mapError = (error: unknown): ApiError => {
